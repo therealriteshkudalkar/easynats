@@ -124,7 +124,7 @@ func (natsStore *NATSStore) CreateDurableConsumerIfNotPresent(streamName string,
 		AckPolicy: jetstream.AckExplicitPolicy,
 	})
 	if err != nil {
-		slog.Error("Error occurred while creating a consumer.")
+		slog.Error("Error occurred while creating a consumer.", "Error", err)
 	}
 }
 
@@ -148,7 +148,7 @@ func (natsStore *NATSStore) CreateDurableWithConsumerWithConfigIfNotPresent(stre
 	var err error
 	natsStore.streamNameConsumerMap[streamName], err = streamHandle.CreateConsumer(natsStore.context, config)
 	if err != nil {
-		slog.Error("Error occurred while creating a consumer.")
+		slog.Error("Error occurred while creating a consumer.", "Error", err)
 		return
 	}
 	slog.Debug("Created new consumer.", "Consumer Name", config.Name)
@@ -183,6 +183,7 @@ func (natsStore *NATSStore) ReadMessageContinuouslyAndPostThemOnChannel(streamNa
 
 		select {
 		case <-natsStore.context.Done():
+			slog.Info("Completing ReadMessageContinuouslyAndPostThemOnChannel Go routine.")
 			return
 		default:
 			continue
@@ -194,7 +195,7 @@ func (natsStore *NATSStore) ReadMessageContinuouslyAndPostThemOnChannel(streamNa
 func (natsStore *NATSStore) PublishMessage(subject string, message []byte) {
 	err := natsStore.natsClient.Publish(subject, message)
 	if err != nil {
-		slog.Debug("Failed to publish the message.")
+		slog.Debug("Failed to publish the message.", "Error", err)
 		return
 	}
 	slog.Debug("Published message successfully.")
@@ -206,7 +207,7 @@ func (natsStore *NATSStore) CreatePublisherWithChannel(messageCh chan *nats_stor
 		for message := range messageCh {
 			err := natsStore.natsClient.Publish(message.Subject, message.Message)
 			if err != nil {
-				slog.Debug("Failed to publish the message.")
+				slog.Debug("Failed to publish the message.", "Error", err)
 				continue
 			}
 			slog.Debug("Published message successfully.")
@@ -218,7 +219,7 @@ func (natsStore *NATSStore) CloseConnection() {
 	// Close the NATS connection using the stream
 	err := natsStore.natsClient.Drain()
 	if err != nil {
-		slog.Error("Could not drain the NATS Connection.")
+		slog.Error("Could not drain the NATS Connection.", "Error", err)
 		return
 	}
 	slog.Info("NATS connection drained Successfully.")
@@ -228,8 +229,8 @@ func NewNATSStore() *NATSStore {
 	return &NATSStore{
 		natsClient:             nil,
 		natsJetstream:          nil,
-		streamNameConsumerMap:  map[string]jetstream.Consumer{},
-		streamNameStreamHandle: map[string]jetstream.Stream{},
+		streamNameConsumerMap:  make(map[string]jetstream.Consumer),
+		streamNameStreamHandle: make(map[string]jetstream.Stream),
 		context:                nil,
 		contextCancelFunc:      nil,
 	}
