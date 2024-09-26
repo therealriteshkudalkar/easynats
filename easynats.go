@@ -10,7 +10,6 @@ package easynats
 import (
 	"context"
 	"errors"
-	"github.com/nats-io/nkeys"
 	"log/slog"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/nats-io/nkeys"
 )
 
 type NATSStore struct {
