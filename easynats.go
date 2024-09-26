@@ -10,6 +10,7 @@ package easynats
 import (
 	"context"
 	"errors"
+	"github.com/nats-io/nkeys"
 	"log/slog"
 	"strings"
 	"time"
@@ -29,9 +30,10 @@ type NATSStore struct {
 	contextCancelFunc      context.CancelFunc
 }
 
-func (natsStore *NATSStore) ConnectAndInitializeJetstream(natsURL string) {
+func (natsStore *NATSStore) ConnectAndInitializeJetstream(natsURL string, natsNKeySeed string, natsNKeyPublicKey string,
+	natsJwt string) {
 	var err error
-	natsStore.natsClient, err = nats.Connect(natsURL,
+	natsOptions := []nats.Option{
 		nats.RetryOnFailedConnect(true),
 		nats.MaxReconnects(-1),
 		nats.ConnectHandler(func(conn *nats.Conn) {
@@ -40,7 +42,33 @@ func (natsStore *NATSStore) ConnectAndInitializeJetstream(natsURL string) {
 		nats.DisconnectErrHandler(func(conn *nats.Conn, err error) {
 			slog.Info("Disconnected from NATS server.", "Error", err)
 		}),
-	)
+	}
+
+	if natsNKeySeed != "" {
+		nk, err := nkeys.FromSeed([]byte(natsNKeySeed))
+		if err == nil {
+			signatureCallback := func(nonce []byte) ([]byte, error) {
+				return nk.Sign(nonce)
+			}
+			slog.Info("Loaded NKey private key successfully.")
+			if natsNKeyPublicKey != "" && natsJwt == "" {
+				natsOptions = append(natsOptions, nats.Nkey(natsNKeyPublicKey, signatureCallback))
+				slog.Info("Using NKey authentication for NATS.")
+			} else if natsJwt != "" {
+				userCallback := func() (string, error) {
+					return natsJwt, nil
+				}
+				natsOptions = append(natsOptions, nats.UserJWT(userCallback, signatureCallback))
+				slog.Info("Using JWT authentication for NATS.")
+			} else {
+				slog.Info("Not using any authentication for NATS.")
+			}
+		} else {
+			slog.Error("Error occurred while loading the NKey private key.")
+		}
+	}
+
+	natsStore.natsClient, err = nats.Connect(natsURL, natsOptions...)
 	if err != nil {
 		slog.Error("Could not establish a connection with NATS server.", "Error", err)
 		return
